@@ -6,6 +6,7 @@ from pfl_types.datagram import Msg, RequestType
 from pfl_types.cmd_types import ADCSCmd, PowerCmd
 from pfl_servers.fast_socket import FastSocket
 from pfl_modes.base_mode import PFLMode
+import numpy as np
 
 SOCKET_PATH = '/tmp/mode/detumble'
 COMMS_SOCKET_PATH = '/tmp/comms'
@@ -33,6 +34,8 @@ class Detumble(PFLMode):
             RequestType.COMMAND, 
             ADCSCmd.IS_TUMBLING
         ).send_and_recv(SOCKET_PATH, ADCS_SOCKET_PATH)
+        
+        
 
         if not is_tumbling:
             self.finish_detumble()
@@ -55,11 +58,35 @@ class Detumble(PFLMode):
 
 
     def finish_detumble(self):
-        '''
-        Disable mag coils, record telem, and go to safe mode
-        after. Mag coils should already be disabled (ie only running when
-        awaiting detumble conn).
-        '''
+        get_attitude = Msg(
+        RequestType.COMMAND, 
+            ADCSCmd.GET_ATTITUDE
+        ).send_and_recv(SOCKET_PATH, ADCS_SOCKET_PATH)
+        
+        get_mag_field = Msg(
+        RequestType.COMMAND, 
+            ADCSCmd.GET_MAG_Field
+        ).send_and_recv(SOCKET_PATH, ADCS_SOCKET_PATH)
+        
+        
+        B = get_mag_field
+        q = get_attitude[0:4]
+        qt = q[1:]
+        qtb = np.cross(B,qt)
+        w = get_attitude[4:]
+        wb = np.cross(B,w)
+        Kp = 0.02e-5;
+        Kd = 0.02e-3;
+        M = -(Kp*qtb + Kd*wb) 
+        
+        Msg(
+        RequestType.COMMAND, 
+            ADCSCmd.ACTUATE_MTORQUE
+        ).send(SOCKET_PATH, ADCS_SOCKET_PATH)
+        
+
+
+        
         pass
 
 
